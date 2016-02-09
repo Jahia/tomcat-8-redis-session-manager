@@ -10,9 +10,6 @@ import org.apache.catalina.Valve;
 import org.apache.catalina.Session;
 import org.apache.catalina.session.ManagerBase;
 
-import org.apache.commons.pool2.impl.GenericObjectPoolConfig;
-import org.apache.commons.pool2.impl.BaseObjectPoolConfig;
-
 import redis.clients.util.Pool;
 import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.JedisSentinelPool;
@@ -22,7 +19,6 @@ import redis.clients.jedis.Protocol;
 
 import java.io.IOException;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.Enumeration;
 import java.util.Set;
 import java.util.EnumSet;
@@ -535,14 +531,13 @@ public class RedisSessionManager extends ManagerBase implements Lifecycle {
 
       session.setId(id);
       session.setNew(false);
-      session.setMaxInactiveInterval(getMaxInactiveInterval());
       session.access();
       session.setValid(true);
       session.resetDirtyTracking();
 
       if (log.isTraceEnabled()) {
         log.trace("Session Contents [" + id + "]:");
-        Enumeration en = session.getAttributeNames();
+        Enumeration<?> en = session.getAttributeNames();
         while(en.hasMoreElements()) {
           log.trace("  " + en.nextElement());
         }
@@ -585,7 +580,7 @@ public class RedisSessionManager extends ManagerBase implements Lifecycle {
 
       if (log.isTraceEnabled()) {
         log.trace("Session Contents [" + redisSession.getId() + "]:");
-        Enumeration en = redisSession.getAttributeNames();
+        Enumeration<?> en = redisSession.getAttributeNames();
         while(en.hasMoreElements()) {
           log.trace("  " + en.nextElement());
         }
@@ -623,8 +618,8 @@ public class RedisSessionManager extends ManagerBase implements Lifecycle {
         log.trace("Save was determined to be unnecessary");
       }
 
-      log.trace("Setting expire timeout on session [" + redisSession.getId() + "] to " + getMaxInactiveInterval());
-      jedis.expire(binaryId, getMaxInactiveInterval());
+      log.trace("Setting expire timeout on session [" + redisSession.getId() + "] to " + redisSession.getMaxInactiveInterval());
+      jedis.expire(binaryId, redisSession.getMaxInactiveInterval());
 
       error = false;
 
