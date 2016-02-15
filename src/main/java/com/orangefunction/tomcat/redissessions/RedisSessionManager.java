@@ -18,6 +18,8 @@ import redis.clients.jedis.Jedis;
 import redis.clients.jedis.Protocol;
 
 import java.io.IOException;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
 import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.Set;
@@ -56,7 +58,8 @@ public class RedisSessionManager extends ManagerBase implements Lifecycle {
   protected String password = null;
   protected int timeout = Protocol.DEFAULT_TIMEOUT;
   protected String sentinelMaster = null;
-  Set<String> sentinelSet = null;
+  protected Set<String> sentinelSet = null;
+  protected String classLoaderClass;
 
   protected Pool<Jedis> connectionPool;
   protected JedisPoolConfig connectionPoolConfig = new JedisPoolConfig();
@@ -185,6 +188,20 @@ public class RedisSessionManager extends ManagerBase implements Lifecycle {
     this.sentinelMaster = master;
   }
 
+  public String getClassLoaderClass() {
+    return classLoaderClass;
+  }
+
+  public void setClassLoaderClass(String classLoaderClass) {
+    if (classLoaderClass != null) {
+      classLoaderClass = classLoaderClass.trim();
+      if (classLoaderClass.equals("")) {
+        classLoaderClass = null;
+      }
+    }
+    this.classLoaderClass = classLoaderClass;
+  }
+
   @Override
   public int getRejectedSessions() {
     // Essentially do nothing.
@@ -289,7 +306,7 @@ public class RedisSessionManager extends ManagerBase implements Lifecycle {
 
     try {
       initializeSerializer();
-    } catch (ClassNotFoundException | InstantiationException | IllegalAccessException e) {
+    } catch (ClassNotFoundException | InstantiationException | IllegalAccessException | NoSuchMethodException | InvocationTargetException e) {
       log.fatal("Unable to load serializer", e);
       throw new LifecycleException(e);
     }
@@ -703,21 +720,22 @@ public class RedisSessionManager extends ManagerBase implements Lifecycle {
     }
   }
 
-  private void initializeSerializer() throws ClassNotFoundException, IllegalAccessException, InstantiationException {
+  @SuppressWarnings("unchecked")
+  private void initializeSerializer() throws ClassNotFoundException, IllegalAccessException, InstantiationException, NoSuchMethodException, InvocationTargetException {
+
     log.info("Attempting to use serializer :" + serializationStrategyClass);
     serializer = (Serializer) Class.forName(serializationStrategyClass).newInstance();
 
-    Loader loader = null;
+    // Get this web application class loader.
+    ClassLoader classLoader = getContext().getLoader().getClassLoader();
 
-    if (getContext() != null) {
-      loader = getContext().getLoader();
+    // In case we have a custom class loader configured, use it (still using the original one as its parent).
+    if (classLoaderClass != null) {
+      Class<ClassLoader> clazz = (Class<ClassLoader>) classLoader.loadClass(classLoaderClass);
+      Constructor<ClassLoader> constructor = clazz.getConstructor(ClassLoader.class);
+      classLoader = constructor.newInstance(classLoader);
     }
 
-    ClassLoader classLoader = null;
-
-    if (loader != null) {
-      classLoader = loader.getClassLoader();
-    }
     serializer.setClassLoader(classLoader);
   }
 
